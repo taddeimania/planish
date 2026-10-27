@@ -512,7 +512,8 @@ void testChain()
 {
     std::vector<float> l (kBlock), r (kBlock);
     {
-        Chain chain;
+        auto chainOwner = std::make_unique<Chain>();   // ~0.5 MB: on the heap, not the stack
+        Chain& chain = *chainOwner;
         chain.prepare (kSr, kBlock);
         ChainSettings s;
         chain.setOrder ({ ModEqualizer, ModExciter, ModPhase });
@@ -524,7 +525,8 @@ void testChain()
 
     // An impulse through the chain lands at its latency.
     {
-        Chain c2;
+        auto c2Owner = std::make_unique<Chain>();   // ~0.5 MB: on the heap, not the stack
+        Chain& c2 = *c2Owner;
         c2.prepare (kSr, kBlock);
         c2.setOrder ({ ModEqualizer, ModExciter, ModPhase, ModDensity, ModClipper });
         ChainSettings s2;
@@ -538,7 +540,8 @@ void testChain()
 
     // Module MIX at 0% gives the aligned dry signal, even with latency.
     {
-        Chain c3;
+        auto c3Owner = std::make_unique<Chain>();   // ~0.5 MB: on the heap, not the stack
+        Chain& c3 = *c3Owner;
         c3.prepare (kSr, kBlock);
         c3.setOrder ({ ModExciter, ModPhase });
         c3.exciter.set ("band1.drive", 80.0f);
@@ -559,7 +562,8 @@ void testChain()
 
     // Bypass plays the delayed input.
     {
-        Chain c4;
+        auto c4Owner = std::make_unique<Chain>();   // ~0.5 MB: on the heap, not the stack
+        Chain& c4 = *c4Owner;
         c4.prepare (kSr, kBlock);
         c4.setOrder ({ ModEqualizer, ModPhase });
         c4.eq.set ("a.b2.gain", 9.0f);
@@ -576,7 +580,8 @@ void testChain()
 
     // Limiter ceiling in every mode, width, pan, invert.
     {
-        Chain c5;
+        auto c5Owner = std::make_unique<Chain>();   // ~0.5 MB: on the heap, not the stack
+        Chain& c5 = *c5Owner;
         c5.prepare (kSr, kBlock);
         c5.setOrder ({});
         ChainSettings s5; s5.limiterOn = true; s5.ceilingDb = -6.0f; s5.outGainDb = 6.0f;
@@ -606,7 +611,8 @@ void testChain()
 
     // ZERO LATENCY: spectral modules, phase rotation and look-aheads drop out.
     {
-        Chain c6;
+        auto c6Owner = std::make_unique<Chain>();   // ~0.5 MB: on the heap, not the stack
+        Chain& c6 = *c6Owner;
         c6.prepare (kSr, kBlock);
         c6.setOrder ({ ModSculptor, ModUnmask, ModPhase, ModExciter, ModClipper, ModDensity });
         ChainSettings s8; s8.zeroLatency = true; s8.limiterOn = true;
@@ -617,7 +623,8 @@ void testChain()
     // Every preset: its parameters exist and it runs finite.
     for (const auto& p : factoryPresets())
     {
-        Chain c;
+        auto cOwner = std::make_unique<Chain>();   // ~0.5 MB: on the heap, not the stack
+        Chain& c = *cOwner;
         c.prepare (kSr, kBlock);
         for (const auto& [id, v] : p.values)
         {
@@ -646,7 +653,8 @@ void testChain()
         check (finite, std::string ("preset runs finite: ") + p.name);
     }
     {
-        Chain c;
+        auto cOwner = std::make_unique<Chain>();   // ~0.5 MB: on the heap, not the stack
+        Chain& c = *cOwner;
         for (const auto& mp : factoryModulePresets())
             for (const auto& [id, v] : mp.values)
                 check (c.module (mp.module).indexOf (id) >= 0, std::string ("module preset parameter exists: ") + mp.name + " " + id);
@@ -654,7 +662,8 @@ void testChain()
 
     // Parameter ids are unique, and every module starts with ON and MIX.
     std::vector<std::string> ids;
-    Chain c;
+    auto cOwner = std::make_unique<Chain>();   // ~0.5 MB: on the heap, not the stack
+    Chain& c = *cOwner;
     for (int m = 0; m < NumModules; ++m)
     {
         check (c.module (m).pOn == 0 && c.module (m).pMix == 1, std::string ("on and mix first: ") + Chain::moduleName (m));

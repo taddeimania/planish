@@ -28,6 +28,7 @@
 #include <array>
 #include <atomic>
 #include <memory>
+#include <vector>
 
 namespace planish
 {
@@ -97,10 +98,12 @@ public:
         return pk;
     }
     int position() const { return writePos.load (std::memory_order_acquire); }
-    void clear() { left.fill (0.0f); right.fill (0.0f); writePos.store (0); lastPeakPos = 0; }
+    void clear() { std::fill (left.begin(), left.end(), 0.0f); std::fill (right.begin(), right.end(), 0.0f); writePos.store (0); lastPeakPos = 0; }
 
 private:
-    std::array<float, kSize> left {}, right {};
+    // On the heap: a Chain holds five Taps, and the tests build Chains on the
+    // stack (1 MB by default on Windows).
+    std::vector<float> left = std::vector<float> (kSize, 0.0f), right = std::vector<float> (kSize, 0.0f);
     std::atomic<int> writePos { 0 };
     mutable int lastPeakPos = 0;
 };
