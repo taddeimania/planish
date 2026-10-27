@@ -11,20 +11,32 @@
 #include <string>
 #include <vector>
 
+#ifdef _WIN32
+ #define NOMINMAX
+ #define WIN32_LEAN_AND_MEAN
+ #include <windows.h>
+#endif
+
 using namespace planish;
 
 namespace
 {
 int failures = 0, checks = 0;
+// Where the tests had got to, for the crash report.
+const char* currentTest = "(starting)";
+char lastCheck[256] = "(none yet)";
+void noteCheck (const std::string& what) { std::snprintf (lastCheck, sizeof (lastCheck), "%s", what.c_str()); }
 
 void check (bool ok, const std::string& what)
 {
     ++checks;
+    noteCheck (what);
     if (! ok) { ++failures; std::printf ("FAIL: %s\n", what.c_str()); }
 }
 void checkNear (double got, double want, double tol, const std::string& what)
 {
     ++checks;
+    noteCheck (what);
     if (! (std::fabs (got - want) <= tol)) { ++failures; std::printf ("FAIL: %s (got %.3f, want %.3f +- %.3f)\n", what.c_str(), got, want, tol); }
 }
 
@@ -697,22 +709,50 @@ void testAnalysis()
     check (std::isfinite (t.points[5]), "analysis makes a target curve");
     check (std::string (InstrumentTargets::name (InstrumentTargets::Kick)) == "Kick", "instrument target names");
 }
+#ifdef _WIN32
+// A crash on Windows otherwise ends the run with no output at all (stdout to
+// a pipe is buffered and lost). Report what failed and where the tests were.
+LONG WINAPI reportCrash (EXCEPTION_POINTERS* e)
+{
+    const auto code = (unsigned long) e->ExceptionRecord->ExceptionCode;
+    const auto base = (const char*) GetModuleHandleA (nullptr);
+    const auto at = (const char*) e->ExceptionRecord->ExceptionAddress;
+    std::fprintf (stderr, "\nCRASH: exception 0x%08lX%s at offset 0x%llx in the test executable\n"
+                          "  in %s, after the check \"%s\" (%d checks run)\n",
+                  code, code == 0xC00000FDul ? " (stack overflow)" : code == 0xC0000005ul ? " (access violation)" : "",
+                  (unsigned long long) (at - base), currentTest, lastCheck, checks);
+    std::fflush (stderr);
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+#endif
 } // namespace
 
 int main()
 {
-    testBuildingBlocks();
-    testGate();
-    testEqualizer();
-    testCompressor();
-    testTransientShaper();
-    testExciter();
-    testClipper();
-    testDensity();
-    testPhase();
-    testSpectral();
-    testChain();
-    testAnalysis();
+    std::setvbuf (stdout, nullptr, _IONBF, 0);
+   #ifdef _WIN32
+    ULONG reserve = 64 * 1024;          // room for the report after a stack overflow
+    SetThreadStackGuarantee (&reserve);
+    SetUnhandledExceptionFilter (reportCrash);
+   #endif
+    auto run = [] (const char* name, void (*test)())
+    {
+        currentTest = name;
+        std::printf ("%s...\n", name);
+        test();
+    };
+    run ("building blocks", testBuildingBlocks);
+    run ("gate", testGate);
+    run ("equalizer", testEqualizer);
+    run ("compressor", testCompressor);
+    run ("transient shaper", testTransientShaper);
+    run ("exciter", testExciter);
+    run ("clipper", testClipper);
+    run ("density", testDensity);
+    run ("phase", testPhase);
+    run ("spectral", testSpectral);
+    run ("chain", testChain);
+    run ("analysis", testAnalysis);
     std::printf ("%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }
