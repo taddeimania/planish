@@ -60,14 +60,20 @@ class Tap
 {
 public:
     static constexpr int kSize = 16384;
+    static_assert ((kSize & (kSize - 1)) == 0, "kSize must be a power of two");
+    // Positions count up and wrap here (a multiple of kSize), so they never overflow.
+    // An int that just counted up went negative after 2^31 samples (6.2 hours at
+    // 96 kHz) and the next writes landed up to 64 KB before the buffer.
+    static constexpr int kWrap = kSize * 65536;
+
     void push (const float* l, const float* r, int n)
     {
         int w = writePos.load (std::memory_order_relaxed);
         for (int i = 0; i < n; ++i)
         {
-            left[(size_t) (w % kSize)] = l[i];
-            right[(size_t) (w % kSize)] = r[i];
-            ++w;
+            left[(size_t) (w & (kSize - 1))] = l[i];
+            right[(size_t) (w & (kSize - 1))] = r[i];
+            w = (w + 1) & (kWrap - 1);
         }
         writePos.store (w, std::memory_order_release);
     }
@@ -77,7 +83,7 @@ public:
         const int w = writePos.load (std::memory_order_acquire);
         for (int i = 0; i < count; ++i)
         {
-            const int idx = ((w - count + i) % kSize + kSize) % kSize;
+            const int idx = (w - count + i) & (kSize - 1);
             l[i] = left[(size_t) idx];
             r[i] = right[(size_t) idx];
         }
@@ -86,19 +92,22 @@ public:
     float takePeak() const
     {
         const int w = writePos.load (std::memory_order_acquire);
-        int count = std::min (kSize, w - lastPeakPos);
+        const int count = std::min (kSize, (w - lastPeakPos) & (kWrap - 1));
+        lastPeakPos = w;
         if (count <= 0) return 0.0f;
         float pk = 0.0f;
         for (int i = 0; i < count; ++i)
         {
-            const int idx = ((w - count + i) % kSize + kSize) % kSize;
+            const int idx = (w - count + i) & (kSize - 1);
             pk = std::max (pk, std::max (std::fabs (left[(size_t) idx]), std::fabs (right[(size_t) idx])));
         }
-        lastPeakPos = w;
         return pk;
     }
+    // 0 .. kWrap - 1; compare with != (it wraps).
     int position() const { return writePos.load (std::memory_order_acquire); }
     void clear() { std::fill (left.begin(), left.end(), 0.0f); std::fill (right.begin(), right.end(), 0.0f); writePos.store (0); lastPeakPos = 0; }
+    // For tests: jump to a position (as if that many samples had gone through).
+    void jumpTo (int pos) { writePos.store (pos & (kWrap - 1)); lastPeakPos = writePos.load(); }
 
 private:
     // On the heap: a Chain holds five Taps, and the tests build Chains on the

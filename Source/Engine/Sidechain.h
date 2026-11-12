@@ -66,6 +66,8 @@ class ScopeRecorder
 public:
     static constexpr int kSize = 4096;
     static constexpr int kDecim = 64;
+    static_assert ((kSize & (kSize - 1)) == 0, "kSize must be a power of two");
+    static constexpr int kWrap = kSize * 65536;   // positions wrap here, never overflow (see Tap)
     struct Entry { float lo = 0, hi = 0, scLo = 0, scHi = 0; double ppq = 0; };
 
     void push (float main, float sc, double ppq)
@@ -76,14 +78,14 @@ public:
         if (++count >= kDecim)
         {
             const int w = writePos.load (std::memory_order_relaxed);
-            auto& e = ring[(size_t) (w % kSize)];
+            auto& e = ring[(size_t) (w & (kSize - 1))];
             e.lo = lo; e.hi = hi; e.scLo = slo; e.scHi = shi; e.ppq = ppq;
-            writePos.store (w + 1, std::memory_order_release);
+            writePos.store ((w + 1) & (kWrap - 1), std::memory_order_release);
             count = 0;
         }
     }
     int position() const { return writePos.load (std::memory_order_acquire); }
-    const Entry& at (int index) const { return ring[(size_t) (((index % kSize) + kSize) % kSize)]; }
+    const Entry& at (int index) const { return ring[(size_t) (index & (kSize - 1))]; }
     void clear() { for (auto& e : ring) e = {}; writePos.store (0); count = 0; }
 
 private:

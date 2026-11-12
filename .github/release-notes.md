@@ -8,6 +8,13 @@ of them on one pad. ASSIST listens to a track, works out what it is, and
 builds a chain for it; the MIX ASSISTANT sets a starting balance for the
 whole song.
 
+## New in 0.1.1
+
+- Fixed a crash after about six hours of running at 96 kHz (twelve at
+  48 kHz). The rings that feed the meters and scopes counted samples in a
+  number that eventually overflowed, and the next writes landed outside
+  their buffer. They wrap safely now, however long the session stays open.
+
 ## Install
 
 Unzip and copy `Planish.vst3` into your VST3 folder (macOS

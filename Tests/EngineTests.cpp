@@ -2,6 +2,7 @@
 // Run with ctest, or directly: ./PlanishEngineTests
 #include "Engine/Chain.h"
 #include "Engine/Presets.h"
+#include "Engine/Sidechain.h"
 
 #include <algorithm>
 #include <cmath>
@@ -727,6 +728,40 @@ LONG WINAPI reportCrash (EXCEPTION_POINTERS* e)
 #endif
 } // namespace
 
+// Hours of audio through the taps. Their positions used to be ints that counted up
+// for ever: after 2^31 samples (6.2 hours at 96 kHz) they went negative and the
+// writes landed before the buffer, zeroing whatever lived there (the crash in Lathe
+// on Nov 12: three instances, one block, the Clipper's parameter storage gone).
+void testLongRunningTaps()
+{
+    Tap tap;
+    tap.jumpTo (Tap::kWrap - 100);
+    std::vector<float> l (512), r (512);
+    for (int i = 0; i < 512; ++i) { l[(size_t) i] = 0.001f * (float) i; r[(size_t) i] = -l[(size_t) i]; }
+    tap.push (l.data(), r.data(), 512);
+    check (tap.position() == 412, "tap: the position wraps to the start, never negative");
+    std::vector<float> gl (512), gr (512);
+    tap.latest (gl.data(), gr.data(), 512);
+    bool same = true;
+    for (int i = 0; i < 512; ++i) same = same && gl[(size_t) i] == l[(size_t) i] && gr[(size_t) i] == r[(size_t) i];
+    check (same, "tap: the latest samples read back in order across the wrap");
+    tap.jumpTo (Tap::kWrap - 10);
+    tap.push (l.data() + 400, r.data() + 400, 20);
+    checkNear (tap.takePeak(), 0.419, 1e-6, "tap: the peak since the last read, across the wrap");
+    check (tap.takePeak() == 0.0f, "tap: nothing new, no peak");
+
+    // The positions a full chain would reach after a day at 192 kHz stay in range.
+    long long samples = 192000LL * 86400LL;
+    long long pos = samples % Tap::kWrap;
+    tap.jumpTo ((int) pos);
+    check (tap.position() >= 0 && tap.position() < Tap::kWrap, "tap: in range after a day at 192 kHz");
+
+    ScopeRecorder scope;
+    for (int i = 0; i < ScopeRecorder::kDecim * 3; ++i) scope.push (0.5f, 0.0f, 1.0);
+    check (scope.position() == 3, "scope: one entry per kDecim samples");
+    check (scope.at (-1).ppq == scope.at (ScopeRecorder::kSize - 1).ppq, "scope: negative indices wrap");
+}
+
 int main()
 {
     std::setvbuf (stdout, nullptr, _IONBF, 0);
@@ -753,6 +788,7 @@ int main()
     run ("spectral", testSpectral);
     run ("chain", testChain);
     run ("analysis", testAnalysis);
+    run ("long-running taps", testLongRunningTaps);
     std::printf ("%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }
