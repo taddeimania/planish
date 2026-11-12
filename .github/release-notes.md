@@ -8,6 +8,10 @@ of them on one pad. ASSIST listens to a track, works out what it is, and
 builds a chain for it; the MIX ASSISTANT sets a starting balance for the
 whole song.
 
+## New in 0.1.2
+
+- The macOS build is signed and notarised by Apple, so your DAW loads it straight away, with no quarantine command first.
+
 ## New in 0.1.1
 
 - Fixed a crash after about six hours of running at 96 kHz (twelve at
